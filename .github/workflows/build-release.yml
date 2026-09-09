@@ -1,0 +1,232 @@
+name: Build EasyAI Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Immutable EasyAI source tag (for example v0.1.0)
+        required: true
+        type: string
+  repository_dispatch:
+    types: [easyai-source-tag]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: easyai-release-${{ inputs.source_ref || github.event.client_payload.source_ref || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_REF: ${{ inputs.source_ref || github.event.client_payload.source_ref }}
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      source_sha: ${{ steps.pin.outputs.source_sha }}
+      version: ${{ steps.pin.outputs.version }}
+    steps:
+      - name: Validate dispatch contract
+        env:
+          DISPATCH_TARGET: ${{ github.event.client_payload.target }}
+        run: |
+          set -euo pipefail
+          test -n "$SOURCE_REF"
+          if [[ "$GITHUB_EVENT_NAME" == repository_dispatch && -n "$DISPATCH_TARGET" && "$DISPATCH_TARGET" != all ]]; then
+            echo 'repository_dispatch target must be all' >&2
+            exit 1
+          fi
+      - name: Check out the immutable source tag
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.BUILD_SOURCE_REPOSITORY }}
+          ref: ${{ env.SOURCE_REF }}
+          token: ${{ secrets.BUILD_SOURCE_TOKEN }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Pin source and version
+        id: pin
+        working-directory: source
+        run: |
+          set -euo pipefail
+          source_sha=$(git rev-parse HEAD)
+          version=$(node -p 'require("./apps/desktop/package.json").version')
+          [[ "$SOURCE_REF" == "v$version" ]] || { echo 'source_ref must match Desktop version' >&2; exit 1; }
+          [[ "$(git rev-list -n 1 "$SOURCE_REF")" == "$source_sha" ]] || { echo 'source ref is not an immutable tag' >&2; exit 1; }
+          printf 'source_sha=%s\nversion=%s\n' "$source_sha" "$version" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: resolve
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.BUILD_SOURCE_REPOSITORY }}
+          ref: ${{ needs.resolve.outputs.source_sha }}
+          token: ${{ secrets.BUILD_SOURCE_TOKEN }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: source/go.mod
+          cache-dependency-path: source/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: source/apps/desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Install frontend dependencies
+        working-directory: source/apps/desktop
+        shell: pwsh
+        run: npm ci
+      - name: Build fixed EasyAI sidecars
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $target = 'x86_64-pc-windows-msvc'
+          $dir = 'apps/desktop/src-tauri/binaries'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          $env:GOOS = 'windows'; $env:GOARCH = 'amd64'
+          go build -trimpath -ldflags '-s -w' -o "$dir/easyai-node-runner-$target.exe" ./cmd/easyai-node-runner
+          go build -trimpath -ldflags '-s -w' -o "$dir/easyai-runner-$target.exe" ./cmd/easyai-runner
+          go build -trimpath -ldflags '-s -w' -o "$dir/easyai-daemon-$target.exe" ./cmd/easyai-daemon
+          Copy-Item config/examples/*.json $dir
+          $config = Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $config.bundle.resources = @('binaries/*', 'config/*')
+          $config | ConvertTo-Json -Depth 20 | Set-Content apps/desktop/src-tauri/tauri.conf.json
+      - name: Build Windows installers
+        working-directory: source/apps/desktop
+        shell: pwsh
+        run: npm run tauri -- build --bundles nsis,msi --target x86_64-pc-windows-msvc
+      - name: Collect Windows artifacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = 'source/apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle'
+          $exe = Get-ChildItem "$bundle/nsis/*.exe" | Select-Object -First 1
+          $msi = Get-ChildItem "$bundle/msi/*.msi" | Select-Object -First 1
+          if (-not $exe -or -not $msi) { throw 'Windows installers were not produced' }
+          New-Item -ItemType Directory -Force dist/windows | Out-Null
+          Copy-Item $exe.FullName dist/windows/easyai-desktop-windows-x64-setup.exe
+          Copy-Item $msi.FullName dist/windows/easyai-desktop-windows-x64.msi
+          Set-Content dist/windows/version.txt '${{ needs.resolve.outputs.version }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easyai-windows-${{ needs.resolve.outputs.source_sha }}
+          path: dist/windows/*
+          if-no-files-found: error
+          retention-days: 7
+
+  macos:
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: x86_64-apple-darwin
+            arch: x64
+          - runner: macos-14
+            target: aarch64-apple-darwin
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.BUILD_SOURCE_REPOSITORY }}
+          ref: ${{ needs.resolve.outputs.source_sha }}
+          token: ${{ secrets.BUILD_SOURCE_TOKEN }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: source/go.mod
+          cache-dependency-path: source/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: source/apps/desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install frontend dependencies
+        working-directory: source/apps/desktop
+        run: npm ci
+      - name: Build fixed EasyAI sidecars
+        working-directory: source
+        run: |
+          set -euo pipefail
+          dir=apps/desktop/src-tauri/binaries
+          mkdir -p "$dir"
+          GOOS=darwin GOARCH=${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} go build -trimpath -ldflags '-s -w' -o "$dir/easyai-node-runner-${{ matrix.target }}" ./cmd/easyai-node-runner
+          GOOS=darwin GOARCH=${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} go build -trimpath -ldflags '-s -w' -o "$dir/easyai-runner-${{ matrix.target }}" ./cmd/easyai-runner
+          GOOS=darwin GOARCH=${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} go build -trimpath -ldflags '-s -w' -o "$dir/easyai-daemon-${{ matrix.target }}" ./cmd/easyai-daemon
+          cp config/examples/*.json "$dir/"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const file='apps/desktop/src-tauri/tauri.conf.json';
+          const config=JSON.parse(fs.readFileSync(file,'utf8'));
+          config.bundle.resources=['binaries/*','config/*'];
+          fs.writeFileSync(file,JSON.stringify(config,null,2)+'\n');
+          NODE
+      - name: Build macOS app
+        working-directory: source/apps/desktop
+        run: npm run tauri -- build --bundles app,dmg --target ${{ matrix.target }}
+      - name: Collect macOS artifacts
+        run: |
+          set -euo pipefail
+          bundle="source/apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+          dmg=$(find "$bundle/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)
+          test -n "$dmg"
+          mkdir -p "dist/macos-${{ matrix.arch }}"
+          cp "$dmg" "dist/macos-${{ matrix.arch }}/easyai-desktop-macos-${{ matrix.arch }}.dmg"
+          printf '%s\n' '${{ needs.resolve.outputs.version }}' > "dist/macos-${{ matrix.arch }}/version.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easyai-macos-${{ matrix.arch }}-${{ needs.resolve.outputs.source_sha }}
+          path: dist/macos-${{ matrix.arch }}/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [resolve, windows, macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+      SOURCE_SHA: ${{ needs.resolve.outputs.source_sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: publisher
+      - uses: actions/download-artifact@v4
+        with:
+          path: raw-artifacts
+          merge-multiple: true
+      - name: Assemble and checksum release
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find raw-artifacts -type f ! -name version.txt -exec cp {} dist/ \;
+          for marker in raw-artifacts/version.txt; do test -f "$marker" || true; done
+          (cd dist && sha256sum easyai-* > SHA256SUMS)
+          test -s dist/SHA256SUMS
+      - name: Create immutable release
+        run: |
+          set -euo pipefail
+          gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && { echo 'Release already exists' >&2; exit 1; } || true
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target main --title "EasyAI $VERSION" --notes "EasyAI Desktop installers. Source commit: $SOURCE_SHA" dist/*
