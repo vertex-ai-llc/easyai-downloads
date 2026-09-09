@@ -112,6 +112,7 @@ jobs:
           Copy-Item config/examples/claude-code-node.windows-x64.example.json "$configDir/claude-code.json"
           Copy-Item config/examples/hermes-runner.windows-x64.example.json "$configDir/hermes.json"
           $config = Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $config.bundle | Add-Member -MemberType NoteProperty -Name externalBin -Value @('binaries/easyai-node-runner', 'binaries/easyai-runner', 'binaries/easyai-daemon') -Force
           $config.bundle | Add-Member -MemberType NoteProperty -Name resources -Value @('config/*') -Force
           $config.bundle | Add-Member -MemberType NoteProperty -Name icon -Value @('icons/icon.ico', 'icons/icon.png') -Force
           $config | ConvertTo-Json -Depth 20 | Set-Content apps/desktop/src-tauri/tauri.conf.json
