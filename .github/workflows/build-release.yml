@@ -136,6 +136,7 @@ jobs:
           retention-days: 7
 
   macos:
+    if: vars.BUILD_MACOS == 'true'
     needs: resolve
     strategy:
       fail-fast: false
@@ -216,6 +217,7 @@ jobs:
           retention-days: 7
 
   publish:
+    if: always() && needs.resolve.result == 'success' && needs.windows.result == 'success' && (needs.macos.result == 'success' || needs.macos.result == 'skipped')
     needs: [resolve, windows, macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
