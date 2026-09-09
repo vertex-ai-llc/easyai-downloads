@@ -110,6 +110,7 @@ jobs:
           Copy-Item config/examples/claude-code-node.windows-x64.example.json "$dir/claude-code.json"
           Copy-Item config/examples/hermes-runner.windows-x64.example.json "$dir/hermes.json"
           $config = Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $config.bundle.externalBin = @('binaries/easyai-node-runner', 'binaries/easyai-runner', 'binaries/easyai-daemon')
           $config.bundle.resources = @('binaries/*', 'config/*')
           $config | ConvertTo-Json -Depth 20 | Set-Content apps/desktop/src-tauri/tauri.conf.json
       - name: Build Windows installers
@@ -194,6 +195,7 @@ jobs:
           import fs from 'node:fs';
           const file='apps/desktop/src-tauri/tauri.conf.json';
           const config=JSON.parse(fs.readFileSync(file,'utf8'));
+          config.bundle.externalBin=['binaries/easyai-node-runner','binaries/easyai-runner','binaries/easyai-daemon'];
           config.bundle.resources=['binaries/*','config/*'];
           fs.writeFileSync(file,JSON.stringify(config,null,2)+'\n');
           NODE
