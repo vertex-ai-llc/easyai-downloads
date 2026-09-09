@@ -30,9 +30,13 @@ jobs:
       - name: Validate dispatch contract
         env:
           DISPATCH_TARGET: ${{ github.event.client_payload.target }}
+          SOURCE_REPOSITORY: ${{ vars.BUILD_SOURCE_REPOSITORY }}
+          SOURCE_TOKEN: ${{ secrets.BUILD_SOURCE_TOKEN }}
         run: |
           set -euo pipefail
           test -n "$SOURCE_REF"
+          test -n "$SOURCE_REPOSITORY" || { echo 'BUILD_SOURCE_REPOSITORY is required' >&2; exit 1; }
+          test -n "$SOURCE_TOKEN" || { echo 'BUILD_SOURCE_TOKEN is required' >&2; exit 1; }
           if [[ "$GITHUB_EVENT_NAME" == repository_dispatch && -n "$DISPATCH_TARGET" && "$DISPATCH_TARGET" != all ]]; then
             echo 'repository_dispatch target must be all' >&2
             exit 1
@@ -99,7 +103,12 @@ jobs:
           go build -trimpath -ldflags '-s -w' -o "$dir/easyai-node-runner-$target.exe" ./cmd/easyai-node-runner
           go build -trimpath -ldflags '-s -w' -o "$dir/easyai-runner-$target.exe" ./cmd/easyai-runner
           go build -trimpath -ldflags '-s -w' -o "$dir/easyai-daemon-$target.exe" ./cmd/easyai-daemon
-          Copy-Item config/examples/*.json $dir
+          Copy-Item "$dir/easyai-node-runner-$target.exe" "$dir/easyai-node-runner.exe"
+          Copy-Item "$dir/easyai-runner-$target.exe" "$dir/easyai-runner.exe"
+          Copy-Item "$dir/easyai-daemon-$target.exe" "$dir/easyai-daemon.exe"
+          Copy-Item config/examples/codex-node.windows-x64.example.json "$dir/codex.json"
+          Copy-Item config/examples/claude-code-node.windows-x64.example.json "$dir/claude-code.json"
+          Copy-Item config/examples/hermes-runner.windows-x64.example.json "$dir/hermes.json"
           $config = Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
           $config.bundle.resources = @('binaries/*', 'config/*')
           $config | ConvertTo-Json -Depth 20 | Set-Content apps/desktop/src-tauri/tauri.conf.json
@@ -174,7 +183,12 @@ jobs:
           GOOS=darwin GOARCH=${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} go build -trimpath -ldflags '-s -w' -o "$dir/easyai-node-runner-${{ matrix.target }}" ./cmd/easyai-node-runner
           GOOS=darwin GOARCH=${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} go build -trimpath -ldflags '-s -w' -o "$dir/easyai-runner-${{ matrix.target }}" ./cmd/easyai-runner
           GOOS=darwin GOARCH=${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} go build -trimpath -ldflags '-s -w' -o "$dir/easyai-daemon-${{ matrix.target }}" ./cmd/easyai-daemon
-          cp config/examples/*.json "$dir/"
+          cp "$dir/easyai-node-runner-${{ matrix.target }}" "$dir/easyai-node-runner"
+          cp "$dir/easyai-runner-${{ matrix.target }}" "$dir/easyai-runner"
+          cp "$dir/easyai-daemon-${{ matrix.target }}" "$dir/easyai-daemon"
+          cp config/examples/codex-node.windows-x64.example.json "$dir/codex.json"
+          cp config/examples/claude-code-node.windows-x64.example.json "$dir/claude-code.json"
+          cp config/examples/hermes-runner.windows-x64.example.json "$dir/hermes.json"
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const file='apps/desktop/src-tauri/tauri.conf.json';
