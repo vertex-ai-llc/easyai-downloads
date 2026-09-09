@@ -106,11 +106,13 @@ jobs:
           Copy-Item "$dir/easyai-node-runner-$target.exe" "$dir/easyai-node-runner.exe"
           Copy-Item "$dir/easyai-runner-$target.exe" "$dir/easyai-runner.exe"
           Copy-Item "$dir/easyai-daemon-$target.exe" "$dir/easyai-daemon.exe"
-          Copy-Item config/examples/codex-node.windows-x64.example.json "$dir/codex.json"
-          Copy-Item config/examples/claude-code-node.windows-x64.example.json "$dir/claude-code.json"
-          Copy-Item config/examples/hermes-runner.windows-x64.example.json "$dir/hermes.json"
+          $configDir = 'apps/desktop/src-tauri/config'
+          New-Item -ItemType Directory -Force $configDir | Out-Null
+          Copy-Item config/examples/codex-node.windows-x64.example.json "$configDir/codex.json"
+          Copy-Item config/examples/claude-code-node.windows-x64.example.json "$configDir/claude-code.json"
+          Copy-Item config/examples/hermes-runner.windows-x64.example.json "$configDir/hermes.json"
           $config = Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
-          $config.bundle | Add-Member -MemberType NoteProperty -Name resources -Value @('binaries/*', 'config/*') -Force
+          $config.bundle | Add-Member -MemberType NoteProperty -Name resources -Value @('config/*') -Force
           $config | ConvertTo-Json -Depth 20 | Set-Content apps/desktop/src-tauri/tauri.conf.json
       - name: Build Windows installers
         working-directory: source/apps/desktop
@@ -187,15 +189,17 @@ jobs:
           cp "$dir/easyai-node-runner-${{ matrix.target }}" "$dir/easyai-node-runner"
           cp "$dir/easyai-runner-${{ matrix.target }}" "$dir/easyai-runner"
           cp "$dir/easyai-daemon-${{ matrix.target }}" "$dir/easyai-daemon"
-          cp config/examples/codex-node.windows-x64.example.json "$dir/codex.json"
-          cp config/examples/claude-code-node.windows-x64.example.json "$dir/claude-code.json"
-          cp config/examples/hermes-runner.windows-x64.example.json "$dir/hermes.json"
+          config_dir=apps/desktop/src-tauri/config
+          mkdir -p "$config_dir"
+          cp config/examples/codex-node.windows-x64.example.json "$config_dir/codex.json"
+          cp config/examples/claude-code-node.windows-x64.example.json "$config_dir/claude-code.json"
+          cp config/examples/hermes-runner.windows-x64.example.json "$config_dir/hermes.json"
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const file='apps/desktop/src-tauri/tauri.conf.json';
           const config=JSON.parse(fs.readFileSync(file,'utf8'));
           config.bundle.externalBin=['binaries/easyai-node-runner','binaries/easyai-runner','binaries/easyai-daemon'];
-          config.bundle.resources=['binaries/*','config/*'];
+          config.bundle.resources=['config/*'];
           fs.writeFileSync(file,JSON.stringify(config,null,2)+'\n');
           NODE
       - name: Build macOS app
