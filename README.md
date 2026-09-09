@@ -1,9 +1,8 @@
 # EasyAI Downloads
 
 This public repository contains only the reproducible GitHub Actions builders
-for EasyAI Desktop. Source code stays in the private
-[`vertex-ai-llc/easyai`](https://github.com/vertex-ai-llc/easyai) repository and
-is checked out by Actions with the `BUILD_SOURCE_TOKEN` secret.
+for EasyAI Desktop. Source code stays in a private repository and is checked
+out by Actions with the `BUILD_SOURCE_TOKEN` secret.
 
 ## Release flow
 
