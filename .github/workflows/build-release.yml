@@ -194,6 +194,7 @@ jobs:
           import fs from 'node:fs';
           const file='apps/desktop/src-tauri/tauri.conf.json';
           const config=JSON.parse(fs.readFileSync(file,'utf8'));
+          config.bundle.externalBin=['binaries/easyai-node-runner','binaries/easyai-runner','binaries/easyai-daemon'];
           config.bundle.resources=['binaries/*','config/*'];
           fs.writeFileSync(file,JSON.stringify(config,null,2)+'\n');
           NODE
