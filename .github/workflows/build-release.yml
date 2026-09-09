@@ -113,6 +113,7 @@ jobs:
           Copy-Item config/examples/hermes-runner.windows-x64.example.json "$configDir/hermes.json"
           $config = Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
           $config.bundle | Add-Member -MemberType NoteProperty -Name resources -Value @('config/*') -Force
+          $config.bundle | Add-Member -MemberType NoteProperty -Name icon -Value @('icons/icon.ico', 'icons/icon.png') -Force
           $config | ConvertTo-Json -Depth 20 | Set-Content apps/desktop/src-tauri/tauri.conf.json
       - name: Build Windows installers
         working-directory: source/apps/desktop
@@ -200,6 +201,7 @@ jobs:
           const config=JSON.parse(fs.readFileSync(file,'utf8'));
           config.bundle.externalBin=['binaries/easyai-node-runner','binaries/easyai-runner','binaries/easyai-daemon'];
           config.bundle.resources=['config/*'];
+          config.bundle.icon=['icons/icon.ico','icons/icon.png'];
           fs.writeFileSync(file,JSON.stringify(config,null,2)+'\n');
           NODE
       - name: Build macOS app
