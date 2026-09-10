@@ -91,47 +91,13 @@ jobs:
         working-directory: source/apps/desktop
         shell: pwsh
         run: npm ci
-      - name: Build fixed EasyAI sidecars
+      - name: Build portable Windows executable
         working-directory: source
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $target = 'x86_64-pc-windows-msvc'
-          $dir = 'apps/desktop/src-tauri/binaries'
-          New-Item -ItemType Directory -Force $dir | Out-Null
-          $env:GOOS = 'windows'; $env:GOARCH = 'amd64'
-          go build -trimpath -ldflags '-s -w' -o "$dir/easyai-node-runner-$target.exe" ./cmd/easyai-node-runner
-          go build -trimpath -ldflags '-s -w' -o "$dir/easyai-runner-$target.exe" ./cmd/easyai-runner
-          go build -trimpath -ldflags '-s -w' -o "$dir/easyai-daemon-$target.exe" ./cmd/easyai-daemon
-          Copy-Item "$dir/easyai-node-runner-$target.exe" "$dir/easyai-node-runner.exe"
-          Copy-Item "$dir/easyai-runner-$target.exe" "$dir/easyai-runner.exe"
-          Copy-Item "$dir/easyai-daemon-$target.exe" "$dir/easyai-daemon.exe"
-          $configDir = 'apps/desktop/src-tauri/config'
-          New-Item -ItemType Directory -Force $configDir | Out-Null
-          Copy-Item config/examples/codex-node.windows-x64.example.json "$configDir/codex.json"
-          Copy-Item config/examples/claude-code-node.windows-x64.example.json "$configDir/claude-code.json"
-          Copy-Item config/examples/hermes-runner.windows-x64.example.json "$configDir/hermes.json"
-          $config = Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
-          $config.bundle | Add-Member -MemberType NoteProperty -Name externalBin -Value @('binaries/easyai-node-runner', 'binaries/easyai-runner', 'binaries/easyai-daemon') -Force
-          $config.bundle | Add-Member -MemberType NoteProperty -Name resources -Value @('config/*') -Force
-          $config.bundle | Add-Member -MemberType NoteProperty -Name icon -Value @('icons/icon.ico', 'icons/icon.png') -Force
-          $config | ConvertTo-Json -Depth 20 | Set-Content apps/desktop/src-tauri/tauri.conf.json
-      - name: Build Windows installers
-        working-directory: source/apps/desktop
-        shell: pwsh
-        run: npm run tauri -- build --bundles nsis,msi --target x86_64-pc-windows-msvc
-      - name: Collect Windows artifacts
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $bundle = 'source/apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle'
-          $exe = Get-ChildItem "$bundle/nsis/*.exe" | Select-Object -First 1
-          $msi = Get-ChildItem "$bundle/msi/*.msi" | Select-Object -First 1
-          if (-not $exe -or -not $msi) { throw 'Windows installers were not produced' }
-          New-Item -ItemType Directory -Force dist/windows | Out-Null
-          Copy-Item $exe.FullName dist/windows/easyai-desktop-windows-x64-setup.exe
-          Copy-Item $msi.FullName dist/windows/easyai-desktop-windows-x64.msi
-          Set-Content dist/windows/version.txt '${{ needs.resolve.outputs.version }}'
+          ./scripts/windows/build-portable.ps1 `
+            -Version '${{ needs.resolve.outputs.version }}' `
+            -OutputDirectory "$env:GITHUB_WORKSPACE/dist/windows"
       - uses: actions/upload-artifact@v4
         with:
           name: easyai-windows-${{ needs.resolve.outputs.source_sha }}
@@ -179,18 +145,14 @@ jobs:
       - name: Install frontend dependencies
         working-directory: source/apps/desktop
         run: npm ci
-      - name: Build fixed EasyAI sidecars
+      - name: Build unified EasyAI helper
         working-directory: source
         run: |
           set -euo pipefail
           dir=apps/desktop/src-tauri/binaries
           mkdir -p "$dir"
-          GOOS=darwin GOARCH=${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} go build -trimpath -ldflags '-s -w' -o "$dir/easyai-node-runner-${{ matrix.target }}" ./cmd/easyai-node-runner
-          GOOS=darwin GOARCH=${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} go build -trimpath -ldflags '-s -w' -o "$dir/easyai-runner-${{ matrix.target }}" ./cmd/easyai-runner
-          GOOS=darwin GOARCH=${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} go build -trimpath -ldflags '-s -w' -o "$dir/easyai-daemon-${{ matrix.target }}" ./cmd/easyai-daemon
-          cp "$dir/easyai-node-runner-${{ matrix.target }}" "$dir/easyai-node-runner"
-          cp "$dir/easyai-runner-${{ matrix.target }}" "$dir/easyai-runner"
-          cp "$dir/easyai-daemon-${{ matrix.target }}" "$dir/easyai-daemon"
+          GOOS=darwin GOARCH=${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} go build -trimpath -ldflags '-s -w' -o "$dir/easyai-agent-${{ matrix.target }}" ./cmd/easyai-agent
+          cp "$dir/easyai-agent-${{ matrix.target }}" "$dir/easyai-agent"
           config_dir=apps/desktop/src-tauri/config
           mkdir -p "$config_dir"
           cp config/examples/codex-node.windows-x64.example.json "$config_dir/codex.json"
@@ -200,7 +162,8 @@ jobs:
           import fs from 'node:fs';
           const file='apps/desktop/src-tauri/tauri.conf.json';
           const config=JSON.parse(fs.readFileSync(file,'utf8'));
-          config.bundle.externalBin=['binaries/easyai-node-runner','binaries/easyai-runner','binaries/easyai-daemon'];
+          config.bundle.active=true;
+          config.bundle.externalBin=['binaries/easyai-agent'];
           config.bundle.resources=['config/*'];
           config.bundle.icon=['icons/icon.ico','icons/icon.png'];
           fs.writeFileSync(file,JSON.stringify(config,null,2)+'\n');
@@ -247,10 +210,10 @@ jobs:
           mkdir -p dist
           find raw-artifacts -type f ! -name version.txt -exec cp {} dist/ \;
           for marker in raw-artifacts/version.txt; do test -f "$marker" || true; done
-          (cd dist && sha256sum easyai-* > SHA256SUMS)
+          (cd dist && sha256sum EasyAI.exe > SHA256SUMS)
           test -s dist/SHA256SUMS
       - name: Create immutable release
         run: |
           set -euo pipefail
           gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && { echo 'Release already exists' >&2; exit 1; } || true
-          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target main --title "EasyAI $VERSION" --notes "EasyAI Desktop installers. Source commit: $SOURCE_SHA" dist/*
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target main --title "EasyAI $VERSION" --notes "Portable EasyAI for Windows. Double-click EasyAI.exe to run; no installer is used. Source commit: $SOURCE_SHA" dist/*
