@@ -110,11 +110,14 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $files = Get-ChildItem 'dist/windows' -File | Where-Object { $_.Name -ne 'version.txt' }
-          if ($files.Count -ne 1 -or $files[0].Name -ne 'EasyAI.exe') {
-            throw 'Windows build must contain exactly one EasyAI.exe'
+          # The build script also emits release metadata and checksums. Verify
+          # the executable explicitly instead of treating those metadata files
+          # as unexpected payloads.
+          $portable = Get-Item 'dist/windows/EasyAI.exe' -ErrorAction SilentlyContinue
+          if (-not $portable -or $portable.Length -le 0) {
+            throw 'Windows build did not produce a non-empty EasyAI.exe'
           }
-          $bootstrapper = Start-Process -FilePath (Resolve-Path 'dist/windows/EasyAI.exe') -PassThru
+          $bootstrapper = Start-Process -FilePath $portable.FullName -PassThru
           $bootstrapper.WaitForExit(15000) | Out-Null
           Start-Sleep -Seconds 8
           $desktop = Get-Process -Name 'easyai-desktop' -ErrorAction SilentlyContinue
