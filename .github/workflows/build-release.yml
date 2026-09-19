@@ -237,8 +237,17 @@ jobs:
           for marker in raw-artifacts/version.txt; do test -f "$marker" || true; done
           (cd dist && sha256sum EasyAI.exe > SHA256SUMS)
           test -s dist/SHA256SUMS
-      - name: Create immutable release
+      - name: Create or update release
         run: |
           set -euo pipefail
-          gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && { echo 'Release already exists' >&2; exit 1; } || true
-          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target main --title "EasyAI $VERSION" --notes "Portable EasyAI for Windows. Double-click EasyAI.exe to run; no installer is used. Source commit: $SOURCE_SHA" dist/*
+          tag="v$VERSION"
+          title="EasyAI $VERSION"
+          notes="Desktop release for Windows and macOS. Source commit: $SOURCE_SHA"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # A retry or a manual dispatch may target the same version. Keep the
+            # release idempotent and refresh the assets produced by this run.
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --title "$title" --notes "$notes"
+            gh release upload "$tag" --repo "$GITHUB_REPOSITORY" dist/* --clobber
+          else
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target main --title "$title" --notes "$notes" dist/*
+          fi
