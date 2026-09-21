@@ -99,34 +99,21 @@ jobs:
           go vet ./...
           npm run typecheck --prefix apps/desktop
           cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
-      - name: Build portable Windows executable
+      - name: Build Windows NSIS installer
         working-directory: source
         shell: pwsh
         run: |
-          ./scripts/windows/build-portable.ps1 `
+          ./scripts/windows/build-installer.ps1 `
             -Version '${{ needs.resolve.outputs.version }}' `
             -OutputDirectory "$env:GITHUB_WORKSPACE/dist/windows"
-      - name: Verify portable launch
+      - name: Verify Windows installation and shortcuts
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          # The build script also emits release metadata and checksums. Verify
-          # the executable explicitly instead of treating those metadata files
-          # as unexpected payloads.
-          $portable = Get-Item 'dist/windows/EasyAI.exe' -ErrorAction SilentlyContinue
-          if (-not $portable -or $portable.Length -le 0) {
-            throw 'Windows build did not produce a non-empty EasyAI.exe'
-          }
-          $bootstrapper = Start-Process -FilePath $portable.FullName -PassThru
-          $bootstrapper.WaitForExit(15000) | Out-Null
-          Start-Sleep -Seconds 8
-          $desktop = Get-Process -Name 'easyai-desktop' -ErrorAction SilentlyContinue
-          if (-not $desktop) { throw 'Portable EasyAI.exe did not launch the Desktop process' }
-          $desktop | Stop-Process -Force
+          ./source/scripts/windows/verify-installer.ps1 -ArtifactDirectory 'dist/windows' -Launch
       - uses: actions/upload-artifact@v4
         with:
           name: easyai-windows-${{ needs.resolve.outputs.source_sha }}
-          path: dist/windows/EasyAI.exe
+          path: dist/windows/*
           if-no-files-found: error
           retention-days: 7
 
@@ -233,13 +220,20 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
+<<<<<<< HEAD
           find raw-artifacts -type f ! -name version.txt -exec cp {} dist/ \;
           for marker in raw-artifacts/version.txt; do test -f "$marker" || true; done
           (cd dist && sha256sum EasyAI.exe > SHA256SUMS)
+=======
+          find raw-artifacts -type f ! -name version.txt ! -name SHA256SUMS -exec cp {} dist/ \;
+          test -f dist/EasyAI-Setup.exe
+          (cd dist && sha256sum $(find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort) > SHA256SUMS)
+>>>>>>> b9f5d2a (ci: build and publish Windows NSIS installer)
           test -s dist/SHA256SUMS
       - name: Create or update release
         run: |
           set -euo pipefail
+<<<<<<< HEAD
           tag="v$VERSION"
           title="EasyAI $VERSION"
           notes="Desktop release for Windows and macOS. Source commit: $SOURCE_SHA"
@@ -250,4 +244,16 @@ jobs:
             gh release upload "$tag" --repo "$GITHUB_REPOSITORY" dist/* --clobber
           else
             gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target main --title "$title" --notes "$notes" dist/*
+=======
+          release_tag="v$VERSION"
+          release_notes="EasyAI Windows installer (NSIS). Install once to create Start Menu and Desktop shortcuts. Source commit: $SOURCE_SHA"
+          if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # Re-running a source dispatch must refresh the existing release
+            # assets instead of failing with "Release already exists". Asset
+            # names are stable, so --clobber makes the publish idempotent.
+            gh release edit "$release_tag" --repo "$GITHUB_REPOSITORY" --title "EasyAI $VERSION" --notes "$release_notes"
+            gh release upload "$release_tag" --repo "$GITHUB_REPOSITORY" --clobber dist/*
+          else
+            gh release create "$release_tag" --repo "$GITHUB_REPOSITORY" --target main --title "EasyAI $VERSION" --notes "$release_notes" dist/*
+>>>>>>> b9f5d2a (ci: build and publish Windows NSIS installer)
           fi
