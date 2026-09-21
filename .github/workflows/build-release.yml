@@ -91,6 +91,17 @@ jobs:
         working-directory: source/apps/desktop
         shell: pwsh
         run: npm ci
+      - name: Prepare Tauri external binaries for verification
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $target = 'x86_64-pc-windows-msvc'
+          $binaryDirectory = 'apps/desktop/src-tauri/binaries'
+          New-Item -ItemType Directory -Force $binaryDirectory | Out-Null
+          go build -trimpath -o "$binaryDirectory/easyai-agent-$target.exe" ./cmd/easyai-agent
+          cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --bin easyai-session-host --target $target
+          Copy-Item "apps/desktop/src-tauri/target/$target/debug/easyai-session-host.exe" "$binaryDirectory/easyai-session-host-$target.exe" -Force
       - name: Verify source on Windows
         working-directory: source
         shell: pwsh
