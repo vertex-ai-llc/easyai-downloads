@@ -220,40 +220,20 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-<<<<<<< HEAD
-          find raw-artifacts -type f ! -name version.txt -exec cp {} dist/ \;
-          for marker in raw-artifacts/version.txt; do test -f "$marker" || true; done
-          (cd dist && sha256sum EasyAI.exe > SHA256SUMS)
-=======
           find raw-artifacts -type f ! -name version.txt ! -name SHA256SUMS -exec cp {} dist/ \;
           test -f dist/EasyAI-Setup.exe
           (cd dist && sha256sum $(find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort) > SHA256SUMS)
->>>>>>> b9f5d2a (ci: build and publish Windows NSIS installer)
           test -s dist/SHA256SUMS
       - name: Create or update release
         run: |
           set -euo pipefail
-<<<<<<< HEAD
-          tag="v$VERSION"
-          title="EasyAI $VERSION"
-          notes="Desktop release for Windows and macOS. Source commit: $SOURCE_SHA"
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            # A retry or a manual dispatch may target the same version. Keep the
-            # release idempotent and refresh the assets produced by this run.
-            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --title "$title" --notes "$notes"
-            gh release upload "$tag" --repo "$GITHUB_REPOSITORY" dist/* --clobber
-          else
-            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target main --title "$title" --notes "$notes" dist/*
-=======
           release_tag="v$VERSION"
           release_notes="EasyAI Windows installer (NSIS). Install once to create Start Menu and Desktop shortcuts. Source commit: $SOURCE_SHA"
           if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             # Re-running a source dispatch must refresh the existing release
-            # assets instead of failing with "Release already exists". Asset
-            # names are stable, so --clobber makes the publish idempotent.
+            # assets instead of failing with "Release already exists".
             gh release edit "$release_tag" --repo "$GITHUB_REPOSITORY" --title "EasyAI $VERSION" --notes "$release_notes"
             gh release upload "$release_tag" --repo "$GITHUB_REPOSITORY" --clobber dist/*
           else
             gh release create "$release_tag" --repo "$GITHUB_REPOSITORY" --target main --title "EasyAI $VERSION" --notes "$release_notes" dist/*
->>>>>>> b9f5d2a (ci: build and publish Windows NSIS installer)
           fi
