@@ -100,6 +100,10 @@ jobs:
           $binaryDirectory = 'apps/desktop/src-tauri/binaries'
           New-Item -ItemType Directory -Force $binaryDirectory | Out-Null
           go build -trimpath -o "$binaryDirectory/easyai-agent-$target.exe" ./cmd/easyai-agent
+          # Tauri's build script validates every externalBin before Cargo can
+          # compile the session-host binary. Use a temporary placeholder for
+          # that second resource, then replace it with the real binary below.
+          Copy-Item "$binaryDirectory/easyai-agent-$target.exe" "$binaryDirectory/easyai-session-host-$target.exe" -Force
           cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --bin easyai-session-host --target $target
           Copy-Item "apps/desktop/src-tauri/target/$target/debug/easyai-session-host.exe" "$binaryDirectory/easyai-session-host-$target.exe" -Force
       - name: Verify source on Windows
