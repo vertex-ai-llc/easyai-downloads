@@ -127,7 +127,7 @@ jobs:
           ./source/scripts/windows/verify-installer.ps1 -ArtifactDirectory 'dist/windows' -Launch
       - uses: actions/upload-artifact@v4
         with:
-          name: easyai-windows-${{ needs.resolve.outputs.source_sha }}
+          name: EasyAI-Windows-x64-${{ needs.resolve.outputs.version }}-${{ needs.resolve.outputs.source_sha }}
           path: dist/windows/*
           if-no-files-found: error
           retention-days: 7
@@ -205,11 +205,11 @@ jobs:
           dmg=$(find "$bundle/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)
           test -n "$dmg"
           mkdir -p "dist/macos-${{ matrix.arch }}"
-          cp "$dmg" "dist/macos-${{ matrix.arch }}/easyai-desktop-macos-${{ matrix.arch }}.dmg"
+          cp "$dmg" "dist/macos-${{ matrix.arch }}/EasyAI-${{ needs.resolve.outputs.version }}-macOS-${{ matrix.arch }}.dmg"
           printf '%s\n' '${{ needs.resolve.outputs.version }}' > "dist/macos-${{ matrix.arch }}/version.txt"
       - uses: actions/upload-artifact@v4
         with:
-          name: easyai-macos-${{ matrix.arch }}-${{ needs.resolve.outputs.source_sha }}
+          name: EasyAI-macOS-${{ matrix.arch }}-${{ needs.resolve.outputs.version }}-${{ needs.resolve.outputs.source_sha }}
           path: dist/macos-${{ matrix.arch }}/*
           if-no-files-found: error
           retention-days: 7
@@ -236,7 +236,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           find raw-artifacts -type f ! -name version.txt ! -name SHA256SUMS -exec cp {} dist/ \;
-          test -f dist/EasyAI-Setup.exe
+          test -n "$(find dist -maxdepth 1 -type f -name 'EasyAI-*-Windows-x64-Setup.exe' -print -quit)"
           (cd dist && sha256sum $(find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort) > SHA256SUMS)
           test -s dist/SHA256SUMS
       - name: Create or update release
