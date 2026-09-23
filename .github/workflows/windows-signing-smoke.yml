@@ -9,7 +9,7 @@ permissions:
 jobs:
   signing:
     runs-on: windows-2022
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - name: Check out EasyAI source
         uses: actions/checkout@v4
@@ -45,7 +45,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force dist/signing-smoke | Out-Null
           go build -trimpath -o dist/signing-smoke/easyai-agent.exe ./cmd/easyai-agent
-      - name: Sign and verify with the persistent EasyAI identity
+      - name: Import and trust the persistent EasyAI identity on this runner
         shell: pwsh
         env:
           EASYAI_WINDOWS_CODESIGN_PFX_BASE64: ${{ secrets.EASYAI_WINDOWS_CODESIGN_PFX_BASE64 }}
@@ -85,12 +85,26 @@ jobs:
             }
           }
           if ([string]::IsNullOrWhiteSpace($signToolPath)) { throw 'Windows SDK signtool.exe was not found.' }
+          [IO.File]::AppendAllText($env:GITHUB_PATH, "$(Split-Path -Parent $signToolPath)`n", [Text.UTF8Encoding]::new($false))
+          $envLine = "EASYAI_CODE_SIGN_THUMBPRINT=$($certificate.Thumbprint)`n"
+          [IO.File]::AppendAllText($env:GITHUB_ENV, $envLine, [Text.UTF8Encoding]::new($false))
+          Write-Host "Imported and trusted EasyAI signing certificate $($certificate.Thumbprint)."
+      - name: Sign temporary helper with timestamp
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
           $binary = Join-Path $env:GITHUB_WORKSPACE 'source/dist/signing-smoke/easyai-agent.exe'
-          & $signToolPath sign /fd SHA256 /sha1 $certificate.Thumbprint /s My /tr 'https://timestamp.digicert.com' /td SHA256 $binary
+          & signtool.exe sign /fd SHA256 /sha1 $env:EASYAI_CODE_SIGN_THUMBPRINT /s My /tr 'https://timestamp.digicert.com' /td SHA256 /timeout 30000 $binary
           if ($LASTEXITCODE -ne 0) { throw "signtool sign failed with exit code $LASTEXITCODE" }
-          & $signToolPath verify /pa /all /v $binary
+          Write-Host 'signtool sign completed.'
+      - name: Verify signed helper and persistent identity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $binary = Join-Path $env:GITHUB_WORKSPACE 'source/dist/signing-smoke/easyai-agent.exe'
+          & signtool.exe verify /pa /all /v $binary
           if ($LASTEXITCODE -ne 0) { throw "signtool verify failed with exit code $LASTEXITCODE" }
           $signature = Get-AuthenticodeSignature -LiteralPath $binary
           if ($signature.Status.ToString() -ne 'Valid') { throw "Authenticode status is $($signature.Status): $($signature.StatusMessage)" }
-          if ($signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint) { throw 'The signed helper does not use the persistent EasyAI certificate.' }
-          Write-Host "Verified EasyAI Authenticode identity $($certificate.Thumbprint)."
+          if ($signature.SignerCertificate.Thumbprint -ne $env:EASYAI_CODE_SIGN_THUMBPRINT) { throw 'The signed helper does not use the persistent EasyAI certificate.' }
+          Write-Host "Verified EasyAI Authenticode identity $($signature.SignerCertificate.Thumbprint)."
