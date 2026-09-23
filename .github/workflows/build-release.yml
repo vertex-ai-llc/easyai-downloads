@@ -125,7 +125,6 @@ jobs:
             throw 'The stable EasyAI Windows code-signing GitHub secrets are not configured.'
           }
           $pfxPath = Join-Path $env:RUNNER_TEMP 'easyai-windows-codesign.pfx'
-          $certificatePath = Join-Path $env:RUNNER_TEMP 'easyai-windows-codesign.cer'
           [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:EASYAI_WINDOWS_CODESIGN_PFX_BASE64))
           $password = ConvertTo-SecureString $env:EASYAI_WINDOWS_CODESIGN_PFX_PASSWORD -AsPlainText -Force
           $certificate = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation 'Cert:\CurrentUser\My' -Password $password
@@ -137,13 +136,6 @@ jobs:
             ForEach-Object { $_.EnhancedKeyUsages } |
             ForEach-Object { $_.Value }
           if ($codeSigningEku -notcontains '1.3.6.1.5.5.7.3.3') { throw 'The imported certificate does not have the Code Signing EKU.' }
-          Export-Certificate -Cert $certificate -FilePath $certificatePath | Out-Null
-          $publicCertificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new($certificatePath)
-          foreach ($storeName in @([Security.Cryptography.X509Certificates.StoreName]::Root, [Security.Cryptography.X509Certificates.StoreName]::TrustedPublisher)) {
-            $store = [Security.Cryptography.X509Certificates.X509Store]::new($storeName, [Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
-            $store.Open([Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
-            try { $store.Add($publicCertificate) } finally { $store.Close() }
-          }
           $envLine = "EASYAI_CODE_SIGN_THUMBPRINT=$($certificate.Thumbprint)`n"
           [IO.File]::AppendAllText($env:GITHUB_ENV, $envLine, [Text.UTF8Encoding]::new($false))
           [IO.File]::Delete($pfxPath)
