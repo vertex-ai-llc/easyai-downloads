@@ -97,7 +97,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $binary = Join-Path $env:GITHUB_WORKSPACE 'source/dist/signing-smoke/easyai-agent.exe'
-          & signtool.exe sign /fd SHA256 /sha1 $env:EASYAI_CODE_SIGN_THUMBPRINT /s My /tr 'https://timestamp.digicert.com' /td SHA256 /timeout 30000 $binary
+          & signtool.exe sign /fd SHA256 /sha1 $env:EASYAI_CODE_SIGN_THUMBPRINT /s My /tr 'http://timestamp.digicert.com' /td SHA256 /timeout 30000 $binary
           if ($LASTEXITCODE -ne 0) { throw "signtool sign failed with exit code $LASTEXITCODE" }
           Write-Host 'signtool sign completed.'
       - name: Verify signed helper and persistent identity
