@@ -114,17 +114,52 @@ jobs:
           go vet ./...
           npm run typecheck --prefix apps/desktop
           cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+      - name: Import stable Windows code-signing certificate
+        shell: pwsh
+        env:
+          EASYAI_WINDOWS_CODESIGN_PFX_BASE64: ${{ secrets.EASYAI_WINDOWS_CODESIGN_PFX_BASE64 }}
+          EASYAI_WINDOWS_CODESIGN_PFX_PASSWORD: ${{ secrets.EASYAI_WINDOWS_CODESIGN_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:EASYAI_WINDOWS_CODESIGN_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:EASYAI_WINDOWS_CODESIGN_PFX_PASSWORD)) {
+            throw 'The stable EasyAI Windows code-signing GitHub secrets are not configured.'
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'easyai-windows-codesign.pfx'
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'easyai-windows-codesign.cer'
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:EASYAI_WINDOWS_CODESIGN_PFX_BASE64))
+          $password = ConvertTo-SecureString $env:EASYAI_WINDOWS_CODESIGN_PFX_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation 'Cert:\CurrentUser\My' -Password $password
+          if ($null -eq $certificate -or -not $certificate.HasPrivateKey) { throw 'The code-signing PFX did not import with its private key.' }
+          if ($certificate.Subject -ne 'CN=EasyAI Windows Code Signing') { throw "Unexpected code-signing certificate subject: $($certificate.Subject)" }
+          if ($certificate.NotAfter -le [DateTime]::UtcNow) { throw 'The code-signing certificate has expired.' }
+          $codeSigningEku = $certificate.Extensions |
+            Where-Object { $_.Oid.Value -eq '2.5.29.37' } |
+            ForEach-Object { $_.EnhancedKeyUsages } |
+            ForEach-Object { $_.Value }
+          if ($codeSigningEku -notcontains '1.3.6.1.5.5.7.3.3') { throw 'The imported certificate does not have the Code Signing EKU.' }
+          Export-Certificate -Cert $certificate -FilePath $certificatePath | Out-Null
+          Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+          Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\TrustedPublisher' | Out-Null
+          $envLine = "EASYAI_CODE_SIGN_THUMBPRINT=$($certificate.Thumbprint)`n"
+          [IO.File]::AppendAllText($env:GITHUB_ENV, $envLine, [Text.UTF8Encoding]::new($false))
+          [IO.File]::Delete($pfxPath)
       - name: Build Windows NSIS installer
         working-directory: source
         shell: pwsh
         run: |
           ./scripts/windows/build-installer.ps1 `
             -Version '${{ needs.resolve.outputs.version }}' `
-            -OutputDirectory "$env:GITHUB_WORKSPACE/dist/windows"
+            -OutputDirectory "$env:GITHUB_WORKSPACE/dist/windows" `
+            -CodeSignThumbprint $env:EASYAI_CODE_SIGN_THUMBPRINT `
+            -RequireSignature
       - name: Verify Windows installation and shortcuts
         shell: pwsh
         run: |
-          ./source/scripts/windows/verify-installer.ps1 -ArtifactDirectory 'dist/windows' -Launch
+          ./source/scripts/windows/verify-installer.ps1 `
+            -ArtifactDirectory 'dist/windows' `
+            -ExpectedCodeSignThumbprint $env:EASYAI_CODE_SIGN_THUMBPRINT `
+            -RequireSignature `
+            -Launch
       - uses: actions/upload-artifact@v4
         with:
           name: EasyAI-Windows-x64-${{ needs.resolve.outputs.version }}-${{ needs.resolve.outputs.source_sha }}
