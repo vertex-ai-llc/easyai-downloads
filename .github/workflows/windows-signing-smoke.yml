@@ -1,0 +1,96 @@
+name: Windows code-signing smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signing:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - name: Check out EasyAI source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.BUILD_SOURCE_REPOSITORY }}
+          ref: main
+          token: ${{ secrets.BUILD_SOURCE_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: source/go.mod
+          cache-dependency-path: source/go.sum
+      - name: Parse Windows build scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @(
+            'source/scripts/windows/build-installer.ps1',
+            'source/scripts/windows/verify-installer.ps1',
+            'source/scripts/windows/verify-portable.ps1'
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE $file), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw "PowerShell parse failed for ${file}: $($errors -join '; ')" }
+          }
+      - name: Build temporary EasyAI helper
+        working-directory: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force dist/signing-smoke | Out-Null
+          go build -trimpath -o dist/signing-smoke/easyai-agent.exe ./cmd/easyai-agent
+      - name: Sign and verify with the persistent EasyAI identity
+        shell: pwsh
+        env:
+          EASYAI_WINDOWS_CODESIGN_PFX_BASE64: ${{ secrets.EASYAI_WINDOWS_CODESIGN_PFX_BASE64 }}
+          EASYAI_WINDOWS_CODESIGN_PFX_PASSWORD: ${{ secrets.EASYAI_WINDOWS_CODESIGN_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:EASYAI_WINDOWS_CODESIGN_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:EASYAI_WINDOWS_CODESIGN_PFX_PASSWORD)) {
+            throw 'The stable EasyAI Windows code-signing GitHub secrets are not configured.'
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'easyai-windows-codesign-smoke.pfx'
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'easyai-windows-codesign-smoke.cer'
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:EASYAI_WINDOWS_CODESIGN_PFX_BASE64))
+          $password = ConvertTo-SecureString $env:EASYAI_WINDOWS_CODESIGN_PFX_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation 'Cert:\CurrentUser\My' -Password $password
+          if ($null -eq $certificate -or -not $certificate.HasPrivateKey) { throw 'The code-signing PFX did not import with its private key.' }
+          if ($certificate.Subject -ne 'CN=EasyAI Windows Code Signing') { throw "Unexpected code-signing certificate subject: $($certificate.Subject)" }
+          $codeSigningEku = $certificate.Extensions |
+            Where-Object { $_.Oid.Value -eq '2.5.29.37' } |
+            ForEach-Object { $_.EnhancedKeyUsages } |
+            ForEach-Object { $_.Value }
+          if ($codeSigningEku -notcontains '1.3.6.1.5.5.7.3.3') { throw 'The imported certificate does not have the Code Signing EKU.' }
+          Export-Certificate -Cert $certificate -FilePath $certificatePath | Out-Null
+          Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+          Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\TrustedPublisher' | Out-Null
+          [IO.File]::Delete($pfxPath)
+          $signToolPath = $null
+          $signToolCommand = Get-Command 'signtool.exe' -ErrorAction SilentlyContinue
+          if ($null -ne $signToolCommand) { $signToolPath = $signToolCommand.Source }
+          if ([string]::IsNullOrWhiteSpace($signToolPath)) {
+            $kitsBin = Join-Path ([Environment]::GetEnvironmentVariable('ProgramFiles(x86)')) 'Windows Kits/10/bin'
+            $candidates = Get-ChildItem -LiteralPath $kitsBin -Directory |
+              Where-Object { $_.Name -match '^\d+(?:\.\d+){2,3}$' } |
+              Sort-Object { [version]$_.Name } -Descending
+            foreach ($candidate in $candidates) {
+              $candidatePath = Join-Path $candidate.FullName 'x64/signtool.exe'
+              if (Test-Path -LiteralPath $candidatePath -PathType Leaf) { $signToolPath = $candidatePath; break }
+            }
+          }
+          if ([string]::IsNullOrWhiteSpace($signToolPath)) { throw 'Windows SDK signtool.exe was not found.' }
+          $binary = Join-Path $env:GITHUB_WORKSPACE 'source/dist/signing-smoke/easyai-agent.exe'
+          & $signToolPath sign /fd SHA256 /sha1 $certificate.Thumbprint /s My /tr 'https://timestamp.digicert.com' /td SHA256 $binary
+          if ($LASTEXITCODE -ne 0) { throw "signtool sign failed with exit code $LASTEXITCODE" }
+          & $signToolPath verify /pa /all /v $binary
+          if ($LASTEXITCODE -ne 0) { throw "signtool verify failed with exit code $LASTEXITCODE" }
+          $signature = Get-AuthenticodeSignature -LiteralPath $binary
+          if ($signature.Status.ToString() -ne 'Valid') { throw "Authenticode status is $($signature.Status): $($signature.StatusMessage)" }
+          if ($signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint) { throw 'The signed helper does not use the persistent EasyAI certificate.' }
+          Write-Host "Verified EasyAI Authenticode identity $($certificate.Thumbprint)."
