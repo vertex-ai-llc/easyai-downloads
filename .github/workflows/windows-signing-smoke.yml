@@ -9,7 +9,7 @@ permissions:
 jobs:
   signing:
     runs-on: windows-2022
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Check out EasyAI source
         uses: actions/checkout@v4
@@ -50,6 +50,7 @@ jobs:
         env:
           EASYAI_WINDOWS_CODESIGN_PFX_BASE64: ${{ secrets.EASYAI_WINDOWS_CODESIGN_PFX_BASE64 }}
           EASYAI_WINDOWS_CODESIGN_PFX_PASSWORD: ${{ secrets.EASYAI_WINDOWS_CODESIGN_PFX_PASSWORD }}
+        timeout-minutes: 2
         run: |
           $ErrorActionPreference = 'Stop'
           if ([string]::IsNullOrWhiteSpace($env:EASYAI_WINDOWS_CODESIGN_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:EASYAI_WINDOWS_CODESIGN_PFX_PASSWORD)) {
@@ -68,9 +69,24 @@ jobs:
             ForEach-Object { $_.Value }
           if ($codeSigningEku -notcontains '1.3.6.1.5.5.7.3.3') { throw 'The imported certificate does not have the Code Signing EKU.' }
           Export-Certificate -Cert $certificate -FilePath $certificatePath | Out-Null
+          $envLine = "EASYAI_CODE_SIGN_THUMBPRINT=$($certificate.Thumbprint)`n"
+          [IO.File]::AppendAllText($env:GITHUB_ENV, $envLine, [Text.UTF8Encoding]::new($false))
+          [IO.File]::Delete($pfxPath)
+          Write-Host "Imported EasyAI signing certificate $($certificate.Thumbprint)."
+      - name: Trust the self-signed certificate on this ephemeral runner
+        shell: pwsh
+        timeout-minutes: 2
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'easyai-windows-codesign-smoke.cer'
           Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
           Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\TrustedPublisher' | Out-Null
-          [IO.File]::Delete($pfxPath)
+          Write-Host 'Trusted EasyAI self-signed certificate for verification on this runner.'
+      - name: Add Windows SDK SignTool to PATH
+        shell: pwsh
+        timeout-minutes: 2
+        run: |
+          $ErrorActionPreference = 'Stop'
           $signToolPath = $null
           $signToolCommand = Get-Command 'signtool.exe' -ErrorAction SilentlyContinue
           if ($null -ne $signToolCommand) { $signToolPath = $signToolCommand.Source }
@@ -86,11 +102,9 @@ jobs:
           }
           if ([string]::IsNullOrWhiteSpace($signToolPath)) { throw 'Windows SDK signtool.exe was not found.' }
           [IO.File]::AppendAllText($env:GITHUB_PATH, "$(Split-Path -Parent $signToolPath)`n", [Text.UTF8Encoding]::new($false))
-          $envLine = "EASYAI_CODE_SIGN_THUMBPRINT=$($certificate.Thumbprint)`n"
-          [IO.File]::AppendAllText($env:GITHUB_ENV, $envLine, [Text.UTF8Encoding]::new($false))
-          Write-Host "Imported and trusted EasyAI signing certificate $($certificate.Thumbprint)."
       - name: Sign temporary helper with timestamp
         shell: pwsh
+        timeout-minutes: 2
         run: |
           $ErrorActionPreference = 'Stop'
           $binary = Join-Path $env:GITHUB_WORKSPACE 'source/dist/signing-smoke/easyai-agent.exe'
@@ -99,6 +113,7 @@ jobs:
           Write-Host 'signtool sign completed.'
       - name: Verify signed helper and persistent identity
         shell: pwsh
+        timeout-minutes: 2
         run: |
           $ErrorActionPreference = 'Stop'
           $binary = Join-Path $env:GITHUB_WORKSPACE 'source/dist/signing-smoke/easyai-agent.exe'
