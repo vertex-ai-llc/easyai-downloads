@@ -138,8 +138,10 @@ jobs:
             ForEach-Object { $_.Value }
           if ($codeSigningEku -notcontains '1.3.6.1.5.5.7.3.3') { throw 'The imported certificate does not have the Code Signing EKU.' }
           Export-Certificate -Cert $certificate -FilePath $certificatePath | Out-Null
-          Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
-          Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\TrustedPublisher' | Out-Null
+          & certutil.exe -user -f -addstore Root $certificatePath
+          if ($LASTEXITCODE -ne 0) { throw "Could not trust the signing certificate in the temporary runner Root store (exit $LASTEXITCODE)." }
+          & certutil.exe -user -f -addstore TrustedPublisher $certificatePath
+          if ($LASTEXITCODE -ne 0) { throw "Could not trust the signing certificate in the temporary runner TrustedPublisher store (exit $LASTEXITCODE)." }
           $envLine = "EASYAI_CODE_SIGN_THUMBPRINT=$($certificate.Thumbprint)`n"
           [IO.File]::AppendAllText($env:GITHUB_ENV, $envLine, [Text.UTF8Encoding]::new($false))
           [IO.File]::Delete($pfxPath)

@@ -79,8 +79,10 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $certificatePath = Join-Path $env:RUNNER_TEMP 'easyai-windows-codesign-smoke.cer'
-          Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
-          Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\TrustedPublisher' | Out-Null
+          & certutil.exe -user -f -addstore Root $certificatePath
+          if ($LASTEXITCODE -ne 0) { throw "Could not trust certificate in the temporary runner Root store (exit $LASTEXITCODE)." }
+          & certutil.exe -user -f -addstore TrustedPublisher $certificatePath
+          if ($LASTEXITCODE -ne 0) { throw "Could not trust certificate in the temporary runner TrustedPublisher store (exit $LASTEXITCODE)." }
           Write-Host 'Trusted EasyAI self-signed certificate for verification on this runner.'
       - name: Add Windows SDK SignTool to PATH
         shell: pwsh
