@@ -4,14 +4,28 @@ on:
   workflow_dispatch:
     inputs:
       source_ref:
-        description: Immutable EasyAI source tag (for example v0.1.0)
+        description: EasyAI source branch/ref for an artifact build, or matching version tag for a release
         required: true
         type: string
+      target:
+        description: Build target
+        required: true
+        type: choice
+        options:
+          - macos
+          - windows
+          - all
+        default: macos
+      publish_release:
+        description: Create or update the GitHub Release (requires target all and a version tag)
+        required: true
+        type: boolean
+        default: false
   repository_dispatch:
     types: [easyai-source-tag]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: easyai-release-${{ inputs.source_ref || github.event.client_payload.source_ref || github.run_id }}
@@ -26,22 +40,43 @@ jobs:
     outputs:
       source_sha: ${{ steps.pin.outputs.source_sha }}
       version: ${{ steps.pin.outputs.version }}
+      target: ${{ steps.contract.outputs.target }}
+      publish_release: ${{ steps.contract.outputs.publish_release }}
     steps:
       - name: Validate dispatch contract
+        id: contract
         env:
+          INPUT_TARGET: ${{ inputs.target }}
+          INPUT_PUBLISH_RELEASE: ${{ inputs.publish_release }}
           DISPATCH_TARGET: ${{ github.event.client_payload.target }}
+          DISPATCH_PUBLISH_RELEASE: ${{ github.event.client_payload.publish_release }}
           SOURCE_REPOSITORY: ${{ vars.BUILD_SOURCE_REPOSITORY }}
           SOURCE_TOKEN: ${{ secrets.BUILD_SOURCE_TOKEN }}
+          BUILD_MACOS: ${{ vars.BUILD_MACOS }}
         run: |
           set -euo pipefail
           test -n "$SOURCE_REF"
           test -n "$SOURCE_REPOSITORY" || { echo 'BUILD_SOURCE_REPOSITORY is required' >&2; exit 1; }
           test -n "$SOURCE_TOKEN" || { echo 'BUILD_SOURCE_TOKEN is required' >&2; exit 1; }
-          if [[ "$GITHUB_EVENT_NAME" == repository_dispatch && -n "$DISPATCH_TARGET" && "$DISPATCH_TARGET" != all ]]; then
-            echo 'repository_dispatch target must be all' >&2
+          if [[ "$GITHUB_EVENT_NAME" == repository_dispatch ]]; then
+            target="${DISPATCH_TARGET:-all}"
+            publish_release="${DISPATCH_PUBLISH_RELEASE:-true}"
+          else
+            target="${INPUT_TARGET:-macos}"
+            publish_release="${INPUT_PUBLISH_RELEASE:-false}"
+          fi
+          case "$target" in macos|windows|all) ;; *) echo 'target must be macos, windows, or all' >&2; exit 1 ;; esac
+          case "$publish_release" in true|false) ;; *) echo 'publish_release must be true or false' >&2; exit 1 ;; esac
+          if [[ "$publish_release" == true && "$target" != all ]]; then
+            echo 'Publishing a release requires target=all.' >&2
             exit 1
           fi
-      - name: Check out the immutable source tag
+          if [[ "$target" != windows && "$BUILD_MACOS" != true ]]; then
+            echo 'BUILD_MACOS must be true to build macOS artifacts.' >&2
+            exit 1
+          fi
+          printf 'target=%s\npublish_release=%s\n' "$target" "$publish_release" >> "$GITHUB_OUTPUT"
+      - name: Check out selected EasyAI source ref
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.BUILD_SOURCE_REPOSITORY }}
@@ -53,15 +88,20 @@ jobs:
       - name: Pin source and version
         id: pin
         working-directory: source
+        env:
+          PUBLISH_RELEASE: ${{ steps.contract.outputs.publish_release }}
         run: |
           set -euo pipefail
           source_sha=$(git rev-parse HEAD)
           version=$(node -p 'require("./apps/desktop/package.json").version')
-          [[ "$SOURCE_REF" == "v$version" ]] || { echo 'source_ref must match Desktop version' >&2; exit 1; }
-          [[ "$(git rev-list -n 1 "$SOURCE_REF")" == "$source_sha" ]] || { echo 'source ref is not an immutable tag' >&2; exit 1; }
+          if [[ "$GITHUB_EVENT_NAME" == repository_dispatch || "$PUBLISH_RELEASE" == true ]]; then
+            [[ "$SOURCE_REF" == "v$version" ]] || { echo 'a published release source_ref must match Desktop version' >&2; exit 1; }
+            [[ "$(git rev-list -n 1 "$SOURCE_REF")" == "$source_sha" ]] || { echo 'source ref is not an immutable tag' >&2; exit 1; }
+          fi
           printf 'source_sha=%s\nversion=%s\n' "$source_sha" "$version" >> "$GITHUB_OUTPUT"
 
   windows:
+    if: needs.resolve.outputs.target == 'all' || needs.resolve.outputs.target == 'windows'
     needs: resolve
     runs-on: windows-2022
     timeout-minutes: 90
@@ -164,7 +204,7 @@ jobs:
           retention-days: 7
 
   macos:
-    if: vars.BUILD_MACOS == 'true'
+    if: (needs.resolve.outputs.target == 'all' || needs.resolve.outputs.target == 'macos') && vars.BUILD_MACOS == 'true'
     needs: resolve
     strategy:
       fail-fast: false
@@ -200,56 +240,112 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - name: Install frontend dependencies
-        working-directory: source/apps/desktop
-        run: npm ci
-      - name: Build unified EasyAI helper
+      - name: Import Apple signing identity and provisioning profiles
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          EASYAI_MAC_APP_PROFILE_BASE64: ${{ secrets.EASYAI_MAC_APP_PROFILE_BASE64 }}
+          EASYAI_MAC_NETWORK_EXTENSION_PROFILE_BASE64: ${{ secrets.EASYAI_MAC_NETWORK_EXTENSION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: easyai-${{ github.run_id }}-${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_TEAM_ID EASYAI_MAC_APP_PROFILE_BASE64 EASYAI_MAC_NETWORK_EXTENSION_PROFILE_BASE64; do
+            [[ -n "${!name}" ]] || { echo "$name is required for the signed macOS build." >&2; exit 1; }
+          done
+          certificate="$RUNNER_TEMP/easyai-signing.p12"
+          app_profile="$RUNNER_TEMP/easyai-app.provisionprofile"
+          extension_profile="$RUNNER_TEMP/easyai-network-extension.provisionprofile"
+          keychain="$RUNNER_TEMP/easyai-signing.keychain-db"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 -D > "$certificate"
+          printf '%s' "$EASYAI_MAC_APP_PROFILE_BASE64" | base64 -D > "$app_profile"
+          printf '%s' "$EASYAI_MAC_NETWORK_EXTENSION_PROFILE_BASE64" | base64 -D > "$extension_profile"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security import "$certificate" -P "$APPLE_CERTIFICATE_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          security find-identity -v -p codesigning "$keychain" | grep -F -- "$APPLE_SIGNING_IDENTITY"
+          python3 - "$app_profile" "$extension_profile" "$APPLE_TEAM_ID" "$APPLE_SIGNING_IDENTITY" "$keychain" <<'PY'
+          import hashlib, plistlib, re, subprocess, sys
+          app_profile, extension_profile, team_id, identity, keychain = sys.argv[1:]
+          identities = subprocess.check_output(
+              ["security", "find-identity", "-v", "-p", "codesigning", keychain], text=True
+          )
+          matching_identity_hashes = {
+              fingerprint.upper()
+              for fingerprint, label in re.findall(r'^\s*\d+\)\s+([A-Fa-f0-9]{40})\s+"([^"]+)"', identities, re.M)
+              if label == identity
+          }
+          if not matching_identity_hashes:
+              raise SystemExit("The requested Developer ID Application identity is not in the temporary keychain.")
+          expected = [
+              (app_profile, team_id + ".com.postlyn.easyai", "app"),
+              (extension_profile, team_id + ".com.postlyn.easyai.networkextension", "extension"),
+          ]
+          for path, app_identifier, role in expected:
+              decoded = subprocess.check_output(["security", "cms", "-D", "-i", path])
+              profile = plistlib.loads(decoded)
+              entitlements = profile.get("Entitlements", {})
+              if entitlements.get("com.apple.application-identifier") != app_identifier:
+                  raise SystemExit(f"{role} profile App ID does not match {app_identifier}.")
+              if team_id not in profile.get("TeamIdentifier", []):
+                  raise SystemExit(f"{role} profile Team ID does not match {team_id}.")
+              if not matching_identity_hashes.intersection(
+                  hashlib.sha1(certificate).hexdigest().upper()
+                  for certificate in profile.get("DeveloperCertificates", [])
+              ):
+                  raise SystemExit(f"{role} profile does not include the imported signing certificate.")
+              if "app-proxy-provider-systemextension" not in entitlements.get(
+                  "com.apple.developer.networking.networkextension", []
+              ):
+                  raise SystemExit(f"{role} profile does not authorize the App Proxy System Extension.")
+              if role == "app" and entitlements.get("com.apple.developer.system-extension.install") is not True:
+                  raise SystemExit("The host app profile does not authorize System Extension installation.")
+          print("Apple profiles, bundle IDs, entitlements, Team ID, and signing certificate match.")
+          PY
+          rm -f "$certificate"
+          {
+            printf 'EASYAI_MAC_APP_PROFILE=%s\n' "$app_profile"
+            printf 'EASYAI_MAC_NETWORK_EXTENSION_PROFILE=%s\n' "$extension_profile"
+          } >> "$GITHUB_ENV"
+      - name: Build, sign, notarize and staple macOS packages
         working-directory: source
+        env:
+          EASYAI_MAC_SIGN: '1'
+          EASYAI_MAC_NOTARIZE: '1'
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: ./scripts/macos/build.sh "$VERSION" "$ARCH" dist/macos
+      - name: Remove temporary Apple signing material
+        if: always()
         run: |
           set -euo pipefail
-          dir=apps/desktop/src-tauri/binaries
-          mkdir -p "$dir"
-          GOOS=darwin GOARCH=${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} go build -trimpath -ldflags '-s -w' -o "$dir/easyai-agent-${{ matrix.target }}" ./cmd/easyai-agent
-          cp "$dir/easyai-agent-${{ matrix.target }}" "$dir/easyai-agent"
-          config_dir=apps/desktop/src-tauri/config
-          mkdir -p "$config_dir"
-          cp config/examples/codex-node.windows-x64.example.json "$config_dir/codex.json"
-          cp config/examples/claude-code-node.windows-x64.example.json "$config_dir/claude-code.json"
-          cp config/examples/hermes-runner.windows-x64.example.json "$config_dir/hermes.json"
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const file='apps/desktop/src-tauri/tauri.conf.json';
-          const config=JSON.parse(fs.readFileSync(file,'utf8'));
-          config.bundle.active=true;
-          config.bundle.externalBin=['binaries/easyai-agent'];
-          config.bundle.resources=['config/*'];
-          config.bundle.icon=['icons/icon.ico','icons/icon.png'];
-          fs.writeFileSync(file,JSON.stringify(config,null,2)+'\n');
-          NODE
-      - name: Build macOS app
-        working-directory: source/apps/desktop
-        run: npm run tauri -- build --bundles app,dmg --target ${{ matrix.target }}
-      - name: Collect macOS artifacts
-        run: |
-          set -euo pipefail
-          bundle="source/apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
-          dmg=$(find "$bundle/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)
-          test -n "$dmg"
-          mkdir -p "dist/macos-${{ matrix.arch }}"
-          cp "$dmg" "dist/macos-${{ matrix.arch }}/EasyAI-${{ needs.resolve.outputs.version }}-macOS-${{ matrix.arch }}.dmg"
-          printf '%s\n' '${{ needs.resolve.outputs.version }}' > "dist/macos-${{ matrix.arch }}/version.txt"
+          keychain="$RUNNER_TEMP/easyai-signing.keychain-db"
+          if [[ -f "$keychain" ]]; then security delete-keychain "$keychain"; fi
+          rm -f "$RUNNER_TEMP/easyai-signing.p12" \
+            "$RUNNER_TEMP/easyai-app.provisionprofile" \
+            "$RUNNER_TEMP/easyai-network-extension.provisionprofile"
       - uses: actions/upload-artifact@v4
         with:
           name: EasyAI-macOS-${{ matrix.arch }}-${{ needs.resolve.outputs.version }}-${{ needs.resolve.outputs.source_sha }}
-          path: dist/macos-${{ matrix.arch }}/*
+          path: source/dist/macos/macos-${{ matrix.arch }}/*
           if-no-files-found: error
           retention-days: 7
 
   publish:
-    if: always() && needs.resolve.result == 'success' && needs.windows.result == 'success' && (needs.macos.result == 'success' || needs.macos.result == 'skipped')
+    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.publish_release == 'true' && needs.windows.result == 'success' && (needs.macos.result == 'success' || needs.macos.result == 'skipped')
     needs: [resolve, windows, macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: write
     env:
       VERSION: ${{ needs.resolve.outputs.version }}
       SOURCE_SHA: ${{ needs.resolve.outputs.source_sha }}
