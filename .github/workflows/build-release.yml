@@ -273,7 +273,7 @@ jobs:
           bash scripts/macos/build.sh \
             '${{ needs.resolve.outputs.version }}' \
             '${{ matrix.arch }}' \
-            "$GITHUB_WORKSPACE/dist/macos-${{ matrix.arch }}"
+            "$GITHUB_WORKSPACE/dist"
       - name: Collect macOS artifacts
         run: |
           set -euo pipefail
