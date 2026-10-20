@@ -129,8 +129,17 @@ jobs:
         shell: pwsh
         run: |
           go test -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run typecheck --prefix apps/desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem agent-assets -Filter *.ps1 -Recurse | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw "PowerShell syntax error in $($_.FullName): $($errors[0].Message)" }
+          }
           cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
       - name: Import stable Windows code-signing certificate
         shell: pwsh
