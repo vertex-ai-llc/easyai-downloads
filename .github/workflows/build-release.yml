@@ -29,6 +29,7 @@ concurrency:
 env:
   SOURCE_REF: ${{ inputs.source_ref || github.event.client_payload.source_ref }}
   TARGET: ${{ inputs.target || github.event.client_payload.target || 'all' }}
+  EASYAI_AGENT_ASSET_PUBLIC_KEY_B64: ${{ secrets.EASYAI_AGENT_ASSET_PUBLIC_KEY_B64 }}
 
 jobs:
   resolve:
@@ -48,6 +49,7 @@ jobs:
           test -n "$SOURCE_REF"
           test -n "$SOURCE_REPOSITORY" || { echo 'BUILD_SOURCE_REPOSITORY is required' >&2; exit 1; }
           test -n "$SOURCE_TOKEN" || { echo 'BUILD_SOURCE_TOKEN is required' >&2; exit 1; }
+          test -n "$EASYAI_AGENT_ASSET_PUBLIC_KEY_B64" || { echo 'Agent asset verification public key is required' >&2; exit 1; }
           case "$TARGET" in
             all|macos|windows) ;;
             *) echo 'target must be all, macos, or windows' >&2; exit 1 ;;
