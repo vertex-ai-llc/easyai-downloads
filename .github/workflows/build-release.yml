@@ -328,15 +328,4 @@ jobs:
           (cd dist && sha256sum $(find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort) > SHA256SUMS)
           test -s dist/SHA256SUMS
       - name: Create or update release
-        run: |
-          set -euo pipefail
-          release_tag="v$VERSION"
-          release_notes="EasyAI desktop release. Source commit: $SOURCE_SHA"
-          if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            # Re-running a source dispatch must refresh the existing release
-            # assets instead of failing with "Release already exists".
-            gh release edit "$release_tag" --repo "$GITHUB_REPOSITORY" --title "EasyAI $VERSION" --notes "$release_notes"
-            gh release upload "$release_tag" --repo "$GITHUB_REPOSITORY" --clobber dist/*
-          else
-            gh release create "$release_tag" --repo "$GITHUB_REPOSITORY" --target main --title "EasyAI $VERSION" --notes "$release_notes" dist/*
-          fi
+        run: bash publisher/scripts/publish-release.sh dist
