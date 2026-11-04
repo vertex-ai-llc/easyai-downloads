@@ -5,7 +5,7 @@ artifact_dir="${1:-dist}"
 : "${SOURCE_SHA:?SOURCE_SHA is required}"
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 release_tag="v$VERSION"
-release_notes="EasyAI desktop release. Source commit: $SOURCE_SHA"
+release_notes="${RELEASE_NOTES:-EasyAI desktop release. Source commit: $SOURCE_SHA}"
 
 retry() {
   local attempt

@@ -1,0 +1,48 @@
+name: Publish verified EasyAI artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Immutable EasyAI source version tag
+        required: true
+        type: string
+      build_run_id:
+        description: Build EasyAI Desktop run containing successful platform artifacts
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: easyai-publish-${{ inputs.source_ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: publisher
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.BUILD_SOURCE_REPOSITORY }}
+          ref: ${{ inputs.source_ref }}
+          token: ${{ secrets.BUILD_SOURCE_TOKEN }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source and recover successful artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: python3 publisher/scripts/recover-verified-artifacts.py
+      - name: Publish verified platforms
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash publisher/scripts/publish-release.sh dist
