@@ -6,8 +6,8 @@ Application source and release credentials are kept outside this public
 repository. Unsigned builds are for testing; signing can be enabled by the
 maintainer for production releases.
 
-If one hosted runner is unavailable, use **Publish verified EasyAI artifacts**
-with the immutable source tag and the original build run ID. It reuses only
+If one hosted runner is unavailable, run **Build EasyAI Desktop** with the
+immutable source tag and set verified_build_run_id to the original build run ID. It reuses only
 artifacts whose platform job succeeded, matches the exact source SHA, verifies
 the archive digest and Windows signing metadata, and lists missing platforms
 in the release notes. It never rebuilds or substitutes another version.

@@ -16,6 +16,11 @@ on:
           - all
           - macos
           - windows
+      verified_build_run_id:
+        description: Optional successful build run to publish without rebuilding
+        required: false
+        default: ''
+        type: string
   repository_dispatch:
     types: [easyai-source-tag]
 
@@ -79,7 +84,7 @@ jobs:
           printf 'source_sha=%s\nversion=%s\ntarget=%s\n' "$source_sha" "$version" "$TARGET" >> "$GITHUB_OUTPUT"
 
   windows:
-    if: needs.resolve.outputs.target == 'all' || needs.resolve.outputs.target == 'windows'
+    if: inputs.verified_build_run_id == '' && (needs.resolve.outputs.target == 'all' || needs.resolve.outputs.target == 'windows')
     needs: resolve
     runs-on: windows-2022
     timeout-minutes: 90
@@ -191,7 +196,7 @@ jobs:
           retention-days: 7
 
   macos:
-    if: (needs.resolve.outputs.target == 'all' || needs.resolve.outputs.target == 'macos') && vars.BUILD_MACOS == 'true'
+    if: inputs.verified_build_run_id == '' && (needs.resolve.outputs.target == 'all' || needs.resolve.outputs.target == 'macos') && vars.BUILD_MACOS == 'true'
     needs: resolve
     strategy:
       fail-fast: false
@@ -303,7 +308,7 @@ jobs:
           retention-days: 7
 
   publish:
-    if: always() && needs.resolve.result == 'success' && (needs.windows.result == 'success' || needs.windows.result == 'skipped') && (needs.macos.result == 'success' || needs.macos.result == 'skipped')
+    if: always() && inputs.verified_build_run_id == '' && needs.resolve.result == 'success' && (needs.windows.result == 'success' || needs.windows.result == 'skipped') && (needs.macos.result == 'success' || needs.macos.result == 'skipped')
     needs: [resolve, windows, macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -328,4 +333,34 @@ jobs:
           (cd dist && sha256sum $(find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort) > SHA256SUMS)
           test -s dist/SHA256SUMS
       - name: Create or update release
+        run: bash publisher/scripts/publish-release.sh dist
+
+  recover-publish:
+    if: inputs.verified_build_run_id != ''
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: publisher
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.BUILD_SOURCE_REPOSITORY }}
+          ref: ${{ env.SOURCE_REF }}
+          token: ${{ secrets.BUILD_SOURCE_TOKEN }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source and recover successful artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN_ID: ${{ inputs.verified_build_run_id }}
+        run: python3 publisher/scripts/recover-verified-artifacts.py
+      - name: Publish verified platforms
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: bash publisher/scripts/publish-release.sh dist
