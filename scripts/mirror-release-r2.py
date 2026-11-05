@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import time
 import urllib.request
 from datetime import datetime, timezone
 
@@ -45,6 +46,8 @@ def release_assets(release):
         result[platform] = {"name": name, "version": tag, "size": item["size"], "sha256": digest[7:], "githubUrl": expected_url,
                             "key": f"easyai/EasyAI-{suffix}", "archiveKey": f"easyai/releases/{tag}/{name}"}
         result[platform]["url"] = PUBLIC + "/" + result[platform]["key"]
+        if isinstance(item.get("id"), int) and item["id"] > 0:
+            result[platform]["assetApiUrl"] = f"https://api.github.com/repos/{REPO}/releases/assets/{item['id']}"
     if not result:
         raise ValueError("Release has no supported installers")
     return result
@@ -59,11 +62,25 @@ def download(item, directory):
         return path
     part = path.with_suffix(path.suffix + ".part")
     print("Downloading " + item["name"], flush=True)
-    subprocess.run(["curl.exe" if os.name == "nt" else "curl", "--fail", "--location", "--retry", "4", "--retry-all-errors", "--connect-timeout", "20", "--max-time", "300", "--silent", "--show-error", "--output", str(part), item["githubUrl"]], check=True)
-    if part.stat().st_size != item["size"] or file_sha(part) != item["sha256"]:
-        raise ValueError("Installer does not match GitHub SHA-256: " + item["name"])
-    part.replace(path)
-    return path
+    sources = []
+    api_url = item.get("assetApiUrl", "")
+    if re.fullmatch(r"https://api[.]github[.]com/repos/" + re.escape(REPO) + r"/releases/assets/[0-9]+", api_url):
+        headers = ["Accept: application/octet-stream", "User-Agent: EasyAI-R2-Publisher"]
+        if os.environ.get("GH_TOKEN"):
+            headers.append("Authorization: Bearer " + os.environ["GH_TOKEN"])
+        sources.append((api_url, headers))
+    sources.append((item["githubUrl"], []))
+    for url, headers in sources:
+        # Supply credentials through stdin, never process arguments or logs.
+        # curl strips Authorization on cross-host redirects (no --location-trusted).
+        config = chr(10).join("header = " + json.dumps(header) for header in headers)
+        command = ["curl.exe" if os.name == "nt" else "curl", "--config", "-", "--fail", "--location", "--retry", "2", "--retry-all-errors", "--retry-delay", "3", "--connect-timeout", "20", "--max-time", "120", "--silent", "--show-error", "--output", str(part), url + "?download=" + str(time.time_ns())]
+        result = subprocess.run(command, input=config, text=True, check=False)
+        if result.returncode == 0 and part.exists() and part.stat().st_size == item["size"] and file_sha(part) == item["sha256"]:
+            part.replace(path)
+            return path
+        print("Download failed or hash mismatch; trying remaining official source", flush=True)
+    raise ValueError("Could not download a matching GitHub asset: " + item["name"])
 
 def verify_object(client, bucket, key, item):
     response = client.get_object(Bucket=bucket, Key=key)
