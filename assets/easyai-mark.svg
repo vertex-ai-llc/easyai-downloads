@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><defs>
+    <linearGradient id="brand-tile" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#7395FF"/><stop offset="1" stop-color="#5044C9"/></linearGradient>
+    <linearGradient id="brand-ink" x1="0" y1="0" x2="0.7" y2="1"><stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#C2F9ED"/></linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#brand-tile)"/>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="15.5" fill="none" stroke="#FFFFFF" stroke-opacity=".16"/>
+  <path d="M22 15H50L45 24H29L27 29H44L39 38H24L22 43H43L38 52H12Z" fill="url(#brand-ink)"/>
+  <path d="M38 43H48L43 52H33Z" fill="#80EDCE"/></svg>

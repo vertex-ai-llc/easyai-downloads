@@ -1,0 +1,29 @@
+name: Refresh download links
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Build EasyAI Desktop]
+    types: [completed]
+permissions:
+  contents: write
+concurrency:
+  group: update-download-homepage
+  cancel-in-progress: false
+jobs:
+  update:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Update links to published assets
+        run: python3 scripts/update-homepage.py
+      - name: Commit updated homepage
+        run: |
+          if git diff --quiet -- README.md; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md
+          git commit -m 'docs: refresh homepage download links'
+          git push origin HEAD:main
