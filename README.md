@@ -18,11 +18,13 @@
 <!-- release-downloads:start -->
 **当前版本：v0.2.148** · 2026-11-05 发布
 
-<p align="center"><a href="https://github.com/vertex-ai-llc/easyai-downloads/releases/download/v0.2.148/EasyAI-0.2.148-Windows-x64-Setup.exe"><img src="assets/download-windows.svg" alt="下载 Windows 安装包" width="260" height="64"></a>
-<a href="https://github.com/vertex-ai-llc/easyai-downloads/releases/download/v0.2.148/EasyAI-0.2.148-macOS-arm64.dmg"><img src="assets/download-mac-arm.svg" alt="下载 Mac 苹果芯片版" width="260" height="64"></a>
-<a href="https://github.com/vertex-ai-llc/easyai-downloads/releases/download/v0.2.148/EasyAI-0.2.148-macOS-x64.dmg"><img src="assets/download-mac-intel.svg" alt="下载 Mac Intel 版" width="260" height="64"></a></p>
+<p align="center"><a href="https://easyai-download.postlyn.com/easyai/EasyAI-Windows-x64-Setup.exe"><img src="assets/download-windows.svg" alt="下载 Windows 安装包" width="260" height="64"></a>
+<a href="https://easyai-download.postlyn.com/easyai/EasyAI-macOS-arm64.dmg"><img src="assets/download-mac-arm.svg" alt="下载 Mac 苹果芯片版" width="260" height="64"></a>
+<a href="https://easyai-download.postlyn.com/easyai/EasyAI-macOS-x64.dmg"><img src="assets/download-mac-intel.svg" alt="下载 Mac Intel 版" width="260" height="64"></a></p>
 
 Windows 10 / 11 · 64 位　｜　macOS · 苹果 M 系列 / Intel
+
+**备用下载（GitHub）：** [Windows 安装包](https://github.com/vertex-ai-llc/easyai-downloads/releases/download/v0.2.148/EasyAI-0.2.148-Windows-x64-Setup.exe) · [Mac 苹果芯片版](https://github.com/vertex-ai-llc/easyai-downloads/releases/download/v0.2.148/EasyAI-0.2.148-macOS-arm64.dmg) · [Mac Intel 版](https://github.com/vertex-ai-llc/easyai-downloads/releases/download/v0.2.148/EasyAI-0.2.148-macOS-x64.dmg)
 
 [查看这个版本的更新说明](https://github.com/vertex-ai-llc/easyai-downloads/releases/tag/v0.2.148) · [全部下载文件](https://github.com/vertex-ai-llc/easyai-downloads/releases/latest)
 <!-- release-downloads:end -->
