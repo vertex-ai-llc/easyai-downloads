@@ -9,7 +9,7 @@
 把 Codex、Claude Code、Hermes 等 AI 工具装进你的电脑。
 写代码、做内容、整理资料，从打开工具开始。
 
-[立即下载](#下载-easyai) · [支持哪些工具](#你想用的-ai这里都有入口) · [三步开始](#三步开始用) · [一起交流](#一起把-ai-用起来)
+[官方网站](https://easyai.postlyn.com/) · [立即下载](#下载-easyai) · [支持哪些工具](#你想用的-ai这里都有入口) · [三步开始](#三步开始用) · [一起交流](#一起把-ai-用起来)
 
 </div>
 
@@ -120,7 +120,7 @@ EasyAI 支持 macOS 11 及以上。各 AI 工具的系统要求不同，软件�
 
 </div>
 
-[学习中心：看教程、找灵感](https://learn.postlyn.com/) · [遇到问题：提交反馈](https://github.com/vertex-ai-llc/easyai-downloads/issues)
+[官方网站：介绍与使用指南](https://easyai.postlyn.com/) · [遇到问题：提交反馈](https://github.com/vertex-ai-llc/easyai-downloads/issues)
 <!-- community:end -->
 
 ---
