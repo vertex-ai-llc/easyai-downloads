@@ -16,6 +16,16 @@ use the normal full build/publish workflow to update an existing release.
 
 Run python scripts/test-recover-verified-artifacts.py to check recovery gates.
 
+## Intel macOS notarization network
+
+The macos-15-intel job blocks outbound UDP 443 on its disposable GitHub-hosted
+runner before notarization, so Apple's ticket download uses TCP HTTPS. This
+is the runner maintainers' workaround for actions/runner-images#14924: HTTP/3
+connections to api.apple-cloudkit.com can fail with NSURLErrorDomain -1005
+and stapler Error 68 even after notarization is Accepted. It does not change
+the installer or the user's network. Signing, stapling, and validation must
+all still succeed. Recheck the upstream issue before removing this step.
+
 ## Stable R2 downloads
 
 After **Build EasyAI Desktop** succeeds (normal or verified recovery),

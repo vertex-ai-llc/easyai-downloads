@@ -277,6 +277,19 @@ jobs:
             echo "EASYAI_MAC_APP_PROFILE=$RUNNER_TEMP/easyai-app.provisionprofile"
             echo "EASYAI_MAC_NETWORK_EXTENSION_PROFILE=$RUNNER_TEMP/easyai-network-extension.provisionprofile"
           } >> "$GITHUB_ENV"
+      - name: Use reliable HTTPS for Apple notarization on Intel runners
+        if: matrix.runner == 'macos-15-intel'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # GitHub-hosted Intel runners intermittently lose Apple's HTTP/3
+          # ticket requests. Force TCP HTTPS on this disposable runner only.
+          # https://github.com/actions/runner-images/issues/14924
+          rules="$RUNNER_TEMP/easyai-apple-https.pf"
+          printf '%s\n' 'block return out quick proto udp from any to any port 443' > "$rules"
+          sudo pfctl -nf "$rules"
+          sudo pfctl -f "$rules"
+          sudo pfctl -E
       - name: Build, sign, notarize, and verify macOS app with Network Extension
         working-directory: source
         env:
