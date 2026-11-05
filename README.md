@@ -15,6 +15,8 @@
 
 ## 下载 EasyAI
 
+[查看 Agent 官方安装、启动、会话恢复与配置参考（Go）](src/core/official_agents.go)。按平台整理，附官方来源；这是独立的公开资料目录，未包含 EasyAI 私有执行器、生产配置或密钥。
+
 <!-- release-downloads:start -->
 **当前版本：v0.2.148** · 2026-11-05 发布
 
