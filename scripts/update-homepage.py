@@ -43,7 +43,7 @@ def download_block(release, mirror=None):
         backups.append(f"[{label}]({url})")
     return "\n".join([
         START, f"**当前版本：{tag}** · {date} 发布", "",
-        "**主下载（R2）：**" if mirror else "**下载安装包：**", "",
+        "**下载地址**", "",
         '<p align="center">' + chr(10).join(buttons) + '</p>', "",
         "Windows 10 / 11 · 64 位　｜　macOS · 苹果 M 系列 / Intel", "",
         "**备用下载（GitHub）：** " + " · ".join(backups), "",
