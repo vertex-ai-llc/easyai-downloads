@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
     inputs:
       source_ref:
-        description: EasyAI source tag containing the package maintenance tool
+        description: EasyAI source tag or commit containing the package maintenance tool
         required: true
-        default: v0.2.148
+        default: 3415bb30b16b7223ff8436c4a59130791f89ad80
       packages:
         description: Official installers to refresh
         type: choice

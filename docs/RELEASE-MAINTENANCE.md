@@ -52,7 +52,7 @@ Tests: `python scripts/test-mirror-release-r2.py` and
 
 Run **Refresh official agent installers** when the official packages need
 refreshing. Select all, Claude, or ChatGPT. It runs the existing EasyAI
-maintenance tool from the selected source tag using the same R2 secret;
+maintenance tool from the selected source tag or immutable commit using the same R2 secret;
 `BUILD_SOURCE_REPOSITORY` and `BUILD_SOURCE_TOKEN` are the existing source
 checkout settings. This is independent of EasyAI release publishing.
 
@@ -60,6 +60,9 @@ The fixed keys remain `agents/chatgpt/ChatGPT-x64.msix`,
 `agents/chatgpt/ChatGPT_Classic.dmg`, `agents/claude/Claude-Latest.exe`,
 and `agents/claude/Claud-Latest.dmg` (the existing spelling is retained).
 The updater reads official latest redirects, validates installer formats,
+and falls back to Claude's official CDN release feeds if its web redirect
+is unavailable. For Windows it requires matching Windows/macOS feed versions
+before resolving a full EXE from the shared build. It
 uploads complete packages, and verifies stored source metadata and sizes.
 If an official endpoint blocks a download, the workflow fails visibly and
 preserves that package's previous object. A metadata artifact records the

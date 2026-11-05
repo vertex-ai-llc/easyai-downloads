@@ -18,6 +18,8 @@
 <!-- release-downloads:start -->
 **当前版本：v0.2.148** · 2026-11-05 发布
 
+**主下载（R2）：**
+
 <p align="center"><a href="https://easyai-download.postlyn.com/easyai/EasyAI-Windows-x64-Setup.exe"><img src="assets/download-windows.svg" alt="下载 Windows 安装包" width="260" height="64"></a>
 <a href="https://easyai-download.postlyn.com/easyai/EasyAI-macOS-arm64.dmg"><img src="assets/download-mac-arm.svg" alt="下载 Mac 苹果芯片版" width="260" height="64"></a>
 <a href="https://easyai-download.postlyn.com/easyai/EasyAI-macOS-x64.dmg"><img src="assets/download-mac-intel.svg" alt="下载 Mac Intel 版" width="260" height="64"></a></p>
