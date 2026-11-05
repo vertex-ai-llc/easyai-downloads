@@ -104,6 +104,18 @@ EasyAI 支持 macOS 11 及以上。各 AI 工具的系统要求不同，软件�
 交流安装经验、分享模型搭配，也聊聊你用 AI 做出的东西。
 
 <!-- community:start -->
+<div align="center">
+
+### EasyAI 交流群
+
+安装遇到问题，一起交流；发现好用的玩法，一起分享。
+
+<img src="assets/community-qr.png" alt="EasyAI 交流群二维码占位图，示意不可扫码" width="240" height="280">
+
+**二维码为展示占位，正式入群入口即将更新。**
+
+</div>
+
 [学习中心：看教程、找灵感](https://learn.postlyn.com/) · [遇到问题：提交反馈](https://github.com/vertex-ai-llc/easyai-downloads/issues)
 <!-- community:end -->
 
