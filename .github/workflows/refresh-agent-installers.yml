@@ -1,0 +1,58 @@
+name: Refresh official agent installers
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: EasyAI source tag containing the package maintenance tool
+        required: true
+        default: v0.2.148
+      packages:
+        description: Official installers to refresh
+        type: choice
+        options: [all, claude, chatgpt]
+        default: all
+permissions:
+  contents: read
+concurrency:
+  group: refresh-official-agent-installers
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.BUILD_SOURCE_REPOSITORY }}
+          ref: ${{ inputs.source_ref }}
+          token: ${{ secrets.BUILD_SOURCE_TOKEN }}
+          path: source
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: Install uploader dependency
+        run: python3 -m pip install -r source/scripts/desktop-packages-requirements.txt
+      - name: Refresh from official sources and upload verified installers
+        env:
+          R2_UPLOAD_CONFIG: ${{ secrets.R2_UPLOAD_CONFIG }}
+          PACKAGES: ${{ inputs.packages }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess, sys, tempfile
+          with tempfile.TemporaryDirectory() as directory:
+              config = pathlib.Path(directory) / 'r2.json'
+              config.write_text(json.dumps(json.loads(os.environ['R2_UPLOAD_CONFIG'])), encoding='utf-8')
+              config.chmod(0o600)
+              command = [sys.executable, 'source/scripts/maintain-desktop-packages.py', '--config', str(config)]
+              selected = os.environ['PACKAGES']
+              if selected != 'all':
+                  command += ['--only', selected + '-windows', '--only', selected + '-macos']
+              subprocess.run(command, check=True)
+          PY
+      - name: Save source metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-installer-source-metadata
+          path: source/.work/desktop-packages/manifest.json
+          if-no-files-found: ignore
+          retention-days: 7

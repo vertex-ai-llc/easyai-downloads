@@ -29,5 +29,14 @@ class DownloadLinks(unittest.TestCase):
             self.assertTrue(module.update(readme,self.release()))
             self.assertFalse(module.update(readme,self.release()))
             self.assertTrue(readme.read_text(encoding="utf-8").endswith("community-qr"))
+    def test_r2_primary_requires_verified_matching_release(self):
+        release = self.release(); release["assets"][0]["digest"] = "sha256:" + "a" * 64
+        stable = "https://easyai-download.postlyn.com/easyai/EasyAI-Windows-x64-Setup.exe"
+        mirror = {"platforms":{"windows-x64":{"version":"v1.2.3","url":stable,"size":10,"sha256":"a"*64}}}
+        block = module.download_block(release,mirror)
+        self.assertIn('href="'+stable+'"',block)
+        self.assertIn("备用下载（GitHub）",block)
+        mirror["platforms"]["windows-x64"]["version"] = "v1.2.2"
+        self.assertNotIn(stable,module.download_block(release,mirror))
 
 if __name__ == "__main__": unittest.main()

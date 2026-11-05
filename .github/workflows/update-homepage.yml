@@ -13,12 +13,24 @@ jobs:
   update:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+      - name: Install R2 publisher dependency
+        run: python3 -m pip install 'boto3>=1.36,<2'
+      - name: Verify publishing and download-link safeguards
+        run: |
+          python3 scripts/test-mirror-release-r2.py
+          python3 scripts/test-update-homepage.py
+      - name: Mirror verified installers to stable R2 downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          R2_UPLOAD_CONFIG: ${{ secrets.R2_UPLOAD_CONFIG }}
+        run: python3 scripts/mirror-release-r2.py
       - name: Update links to published assets
-        run: python3 scripts/update-homepage.py
+        run: python3 scripts/update-homepage.py --mirror-json dist/r2-mirror/mirror.json
       - name: Commit updated homepage
         run: |
           if git diff --quiet -- README.md; then exit 0; fi
