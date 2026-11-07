@@ -18,7 +18,7 @@
 [查看 Agent 官方安装、启动、会话恢复与配置参考（Go）](src/core/official_agents.go)。按平台整理，附官方来源；这是独立的公开资料目录，未包含 EasyAI 私有执行器、生产配置或密钥。
 
 <!-- release-downloads:start -->
-**当前版本：v0.2.149** · 2026-11-06 发布
+**当前版本：v0.2.150** · 2026-11-07 发布
 
 **下载地址**
 
@@ -28,9 +28,9 @@
 
 Windows 10 / 11 · 64 位　｜　macOS · 苹果 M 系列 / Intel
 
-**备用下载（GitHub）：** [Windows 安装包](https://github.com/vertex-ai-llc/easyai-downloads/releases/download/v0.2.149/EasyAI-0.2.149-Windows-x64-Setup.exe) · [Mac 苹果芯片版](https://github.com/vertex-ai-llc/easyai-downloads/releases/download/v0.2.149/EasyAI-0.2.149-macOS-arm64.dmg) · [Mac Intel 版](https://github.com/vertex-ai-llc/easyai-downloads/releases/download/v0.2.149/EasyAI-0.2.149-macOS-x64.dmg)
+**备用下载（GitHub）：** [Windows 安装包](https://github.com/vertex-ai-llc/easyai-downloads/releases/download/v0.2.150/EasyAI-0.2.150-Windows-x64-Setup.exe) · [Mac 苹果芯片版](https://github.com/vertex-ai-llc/easyai-downloads/releases/download/v0.2.150/EasyAI-0.2.150-macOS-arm64.dmg) · [Mac Intel 版](https://github.com/vertex-ai-llc/easyai-downloads/releases/download/v0.2.150/EasyAI-0.2.150-macOS-x64.dmg)
 
-[查看这个版本的更新说明](https://github.com/vertex-ai-llc/easyai-downloads/releases/tag/v0.2.149) · [全部下载文件](https://github.com/vertex-ai-llc/easyai-downloads/releases/latest)
+[查看这个版本的更新说明](https://github.com/vertex-ai-llc/easyai-downloads/releases/tag/v0.2.150) · [全部下载文件](https://github.com/vertex-ai-llc/easyai-downloads/releases/latest)
 <!-- release-downloads:end -->
 
 不知道 Mac 用哪版？点屏幕左上角 ** → 关于本机**：显示 Apple M 系列就选苹果芯片版，显示 Intel 就选 Intel 版。
