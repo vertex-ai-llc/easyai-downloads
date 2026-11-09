@@ -131,6 +131,6 @@ EasyAI 支持 macOS 11 及以上。各 AI 工具的系统要求不同，软件�
 
 **EasyAI · 让好用的 AI，更容易用起来。**
 
-[下载最新版](https://github.com/vertex-ai-llc/easyai-downloads/releases/latest)
+[下载最新版](#下载-easyai)
 
 </div>
